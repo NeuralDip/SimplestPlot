@@ -27,7 +27,7 @@ public class SimplestPlot : MonoBehaviour
         public Color MyColor;
         public PhaseSpaceClass() { XValues = new float[0]; YValues = new float[0]; MyColor = new Color(1, 1, 1); }
     }
-    public enum StatsPlotType
+    public enum PlotType
     {
         TimeSeries = 0,
         Distribution = 1,
@@ -35,12 +35,19 @@ public class SimplestPlot : MonoBehaviour
     }
     private Texture2D PlotTexture;
     private Image PlotImage;
-    private Vector2 TextureResolution = new Vector2(200, 100);
+    private Vector2 TextureResolution = new Vector2(100, 100);
+    private float StartPosX;
+    private float StartPosY;
 
+    // Global Variables
     public Color BackGroundColor = new Color(0, 0, 0);
     public Color TextColor = new Color(1, 1, 1);
-    public StatsPlotType MyPlotType = StatsPlotType.TimeSeries;
+    public int FontSize = 12;
+    public PlotType MyPlotType = PlotType.TimeSeries;
     public bool ShowWarnings = true;
+    public bool AxesVisible = true;
+
+    // PLot variables
     public List<SeriesClass> SeriesPlotY;
     public float[] SeriesPlotX;
     public List<DistributionClass> DistributionPlot;
@@ -58,20 +65,14 @@ public class SimplestPlot : MonoBehaviour
         PlotImage = GetComponent<Image>();
         if (PlotImage == null) throw new Exception("Simplest plot needs an image component in the same GameObject in order to work.");
 
-
-
-        GameObject GOPlotXMinText = new GameObject("XMin", typeof(Text));
-        GameObject GOPlotXMaxText = new GameObject("XMax", typeof(Text));
-        GameObject GOPlotYMinText = new GameObject("YMin", typeof(Text));
-        GameObject GOPlotYMaxText = new GameObject("YMax", typeof(Text));
-        GameObject GOWarningText = new GameObject("Warning", typeof(Text));
-        GOPlotXMinText.transform.SetParent(transform);
-        GOPlotXMaxText.transform.SetParent(transform);
-        GOPlotYMinText.transform.SetParent(transform);
-        GOPlotYMaxText.transform.SetParent(transform);
-        GOWarningText.transform.SetParent(transform);
+        SeriesPlotY = new List<SeriesClass>();
+        DistributionPlot = new List<DistributionClass>();
+        ActualDistribution = new List<float[]>();
+        PhaseSpacePlot = new List<PhaseSpaceClass>();
 
         SetResolution(TextureResolution);
+
+        SetupText();
     }
 
     // Getters Setters
@@ -80,8 +81,10 @@ public class SimplestPlot : MonoBehaviour
         TextureResolution = NewResolution;
         PlotTexture = new Texture2D((int)TextureResolution.x, (int)TextureResolution.y);
         PlotImage.GetComponent<Image>().sprite = Sprite.Create(PlotTexture, new Rect(0, 0, TextureResolution.x, TextureResolution.y), new Vector2(0.0f, 0.0f));
-        ResetTransforms();
+        StartPosX = TextureResolution.x * 0.05f;
+        StartPosY = TextureResolution.y * 0.05f;
     }
+    public Vector2 GetResolution() { return TextureResolution; }
 
     // Main Update. Can put this into Update, but might be better to update only when data has changed
     public void UpdatePlot()
@@ -92,158 +95,101 @@ public class SimplestPlot : MonoBehaviour
         float ScaleX = 0;
         float ScaleY = 0;
         if (ShowWarnings) WarningText.text = ConsistencyCheck();
+        else WarningText.text = "";
 
-        if (MyPlotType == StatsPlotType.TimeSeries)
+        if (MyPlotType == PlotType.TimeSeries)
         {
-            MinMaxOfPlotsX = FindMinMax(true);
-            MinMaxOfPlotsY = FindMinMax(false);
-            ScaleX = 1.8f;
-            ScaleY = (float)(PlotTexture.height - 20) / (float)(MinMaxOfPlotsY[1] - MinMaxOfPlotsY[0]);
+            MinMaxOfPlotsX = FindMinMaxSeries(true);
+            MinMaxOfPlotsY = FindMinMaxSeries(false);
+            ScaleX = (float)(PlotTexture.width - 2 * StartPosX) / (float)(MinMaxOfPlotsX[1] - MinMaxOfPlotsX[0]);
+            ScaleY = (float)(PlotTexture.height - 2 * StartPosY) / (float)(MinMaxOfPlotsY[1] - MinMaxOfPlotsY[0]);
+            for (int Cnt = 0; Cnt < SeriesPlotY.Count; Cnt++)
+                DrawTimeSeriesPlot(ScaleX, ScaleY, SeriesPlotX, MinMaxOfPlotsX[0], SeriesPlotY[Cnt].YValues, MinMaxOfPlotsY[0], SeriesPlotY[Cnt].MyColor);
         }
-        else if (MyPlotType == StatsPlotType.Distribution)
+        else if (MyPlotType == PlotType.Distribution)
         {
             MinMaxOfPlotsX = FindMinMaxOfDistribution();
             MinMaxOfPlotsY = PrepareDistribution(MinMaxOfPlotsX);
-
-            ScaleX = (float)(PlotTexture.width - 20) / (float)(MinMaxOfPlotsX[1] - MinMaxOfPlotsX[0]);
-            ScaleY = (float)(PlotTexture.height - 20) / (float)(MinMaxOfPlotsY[1] - MinMaxOfPlotsY[0]);
-        }
-        else
-        {
-            MinMaxOfPlotsY = FindMinMax(true);
-            MinMaxOfPlotsX = FindMinMax(false);
-            ScaleX = (float)(PlotTexture.width - 20) / (float)(MinMaxOfPlotsX[1] - MinMaxOfPlotsX[0]);
-            ScaleY = (float)(PlotTexture.height - 20) / (float)(MinMaxOfPlotsY[1] - MinMaxOfPlotsY[0]);
-        }
-
-        if (MinMaxOfPlotsY[1] < float.MaxValue && MinMaxOfPlotsY[0] > float.MinValue)
-        {
-            if (MinMaxOfPlotsY[1] >= MinMaxOfPlotsY[0])
-            {
-                PlotYMaxText.text = MinMaxOfPlotsY[1].ToString();
-                PlotYMinText.text = MinMaxOfPlotsY[0].ToString();
-            }
-            else
-            {
-                PlotYMaxText.text = "";
-                PlotYMinText.text = "";
-            }
-            if (MinMaxOfPlotsX[0] > MinMaxOfPlotsX[1])
-            {
-                PlotXMaxText.text = "";
-                PlotXMinText.text = "";
-            }
-            else
-            {
-                PlotXMaxText.text = MinMaxOfPlotsX[1].ToString();
-                PlotXMinText.text = MinMaxOfPlotsX[0].ToString();
-            }
-        }
-        else
-        {
-            PlotYMaxText.text = "";
-            PlotYMinText.text = "";
-            PlotXMaxText.text = "";
-            PlotXMinText.text = "";
-        }
-        if (MyPlotType == StatsPlotType.TimeSeries)
-        {
-            for (int Cnt = 0; Cnt < SeriesPlotY.Count; Cnt++)
-                DrawTimeSeriesPlot(ScaleX, ScaleY, 10, 10, MinMaxOfPlotsY[0], SeriesPlotY[Cnt].YValues, SeriesPlotY[Cnt].MyColor);
-        }
-        else if (MyPlotType == StatsPlotType.Distribution)
-        {
+            ScaleX = (float)(PlotTexture.width - 2 * StartPosX) / (float)(MinMaxOfPlotsX[1] - MinMaxOfPlotsX[0]);
+            ScaleY = (float)(PlotTexture.height - 2 * StartPosY) / (float)(MinMaxOfPlotsY[1] - MinMaxOfPlotsY[0]);
             for (int Cnt = 0; Cnt < DistributionPlot.Count; Cnt++)
             {
                 float BinDimention = (MinMaxOfPlotsX[1] - MinMaxOfPlotsX[0]) / DistributionPlot[Cnt].NumberOfBins;
-                DrawDistributionPlot(ScaleX, ScaleY, 10, 10, BinDimention, MinMaxOfPlotsY[0], ActualDistribution[Cnt], SeriesPlotY[Cnt].MyColor);
+                DrawDistributionPlot(ScaleX, ScaleY, BinDimention, MinMaxOfPlotsY[0], ActualDistribution[Cnt], SeriesPlotY[Cnt].MyColor);
             }
         }
         else
         {
+            MinMaxOfPlotsX = FindMinMaxPhase(true);
+            MinMaxOfPlotsY = FindMinMaxPhase(false);
+            ScaleX = (float)(PlotTexture.width - 2 * StartPosX) / (float)(MinMaxOfPlotsX[1] - MinMaxOfPlotsX[0]);
+            ScaleY = (float)(PlotTexture.height - 2 * StartPosY) / (float)(MinMaxOfPlotsY[1] - MinMaxOfPlotsY[0]);
             for (int Cnt = 0; Cnt < PhaseSpacePlot.Count; Cnt++)
-                DrawPhaseSpacePlot(ScaleX, ScaleY, 10, 10, PhaseSpacePlot[Cnt].XValues, MinMaxOfPlotsX[0], PhaseSpacePlot[Cnt].YValues, MinMaxOfPlotsY[0], PhaseSpacePlot[Cnt].MyColor);
+                DrawPhaseSpacePlot(ScaleX, ScaleY, PhaseSpacePlot[Cnt].XValues, MinMaxOfPlotsX[0], PhaseSpacePlot[Cnt].YValues, MinMaxOfPlotsY[0], PhaseSpacePlot[Cnt].MyColor);
         }
 
+        UpdateText(MinMaxOfPlotsX, MinMaxOfPlotsY);
         PlotTexture.Apply();
     }
 
-    private float[] FindMinMax(bool XNotY)
+    // Draw Functions
+
+    private void DrawTimeSeriesPlot(float PlotScaleX, float PlotScaleY, float[] XPoints, float MinX, float[] YPoints, float MinY, Color LineColor)
     {
-        float[] MinMaxOnArray = new float[2];
-        float[] ToReturn = new float[2];
-        ToReturn[0] = float.MaxValue;
-        ToReturn[1] = float.MinValue;
-        if (XNotY)
+        int FirstX, FirstY, SecondX, SecondY;
+        bool NoXValues = XPoints == null || XPoints.Length == 0;
+        SecondX = (int)StartPosX;
+        SecondY = (int)((YPoints[0] - MinY) * PlotScaleY + StartPosY);
+
+        for (int Cnt = 1; Cnt < YPoints.Length; Cnt++)
         {
-            if (SeriesPlotX == null || SeriesPlotX.Length == 0)
-            {
-                ToReturn[0] = SeriesPlotX.Min();
-                ToReturn[1] = SeriesPlotX.Max();
-            }
-            else
-            {
-                for (int Cnt = 0; Cnt < SeriesPlotY.Count; Cnt++)
-                {
-                    MinMaxOnArray[1] = SeriesPlotY[Cnt].YValues.Length;
-                    ToReturn[1] = Math.Max(ToReturn[1], MinMaxOnArray[1]);
-                }
-                ToReturn[0] = 1;
-            }
+            FirstX = SecondX;
+            FirstY = SecondY;
+            SecondX = NoXValues ? (int)(Cnt * PlotScaleX + StartPosX) : (int)((XPoints[Cnt] - MinX) * PlotScaleX + StartPosX);
+            SecondY = (int)((YPoints[Cnt] - MinY) * PlotScaleY + StartPosY);
+            DrawLine(PlotTexture, FirstX, FirstY, SecondX, SecondY, LineColor);
         }
-        for (int Cnt = 0; Cnt < SeriesPlotY.Count; Cnt++)
-        {
-            MinMaxOnArray[1] = SeriesPlotY[Cnt].YValues.Max();
-            MinMaxOnArray[0] = SeriesPlotY[Cnt].YValues.Min();
-            ToReturn[0] = Math.Min(ToReturn[0], MinMaxOnArray[0]);
-            ToReturn[1] = Math.Max(ToReturn[1], MinMaxOnArray[1]);
-        }
-        return ToReturn;
     }
-    private float[] FindMinMaxOfDistribution()
+    private void DrawDistributionPlot(float PlotScaleX, float PlotScaleY, float BinDimention, float MinY, float[] YPoints, Color LineColor)
     {
-        float[] MinMaxOnArray = new float[2];
-        float[] ToReturn = new float[2];
-        ToReturn[0] = float.MaxValue;
-        ToReturn[1] = float.MinValue;
-        for (int Cnt = 0; Cnt < DistributionPlot.Count; Cnt++)
+        int FirstX, FirstY, SecondX, SecondY;
+        FirstY = (int)StartPosY;
+        SecondX = (int)StartPosX;
+
+        for (int Cnt = 0; Cnt < YPoints.Length; Cnt++)
         {
-            MinMaxOnArray[1] = DistributionPlot[Cnt].Values.Max();
-            MinMaxOnArray[0] = DistributionPlot[Cnt].Values.Min();
-            ToReturn[0] = Math.Min(ToReturn[0], MinMaxOnArray[0]);
-            ToReturn[1] = Math.Max(ToReturn[1], MinMaxOnArray[1]);
+            //Draw Vertical line
+            FirstX = SecondX;
+            SecondY = (int)((YPoints[Cnt] - MinY) * PlotScaleY + StartPosY);
+            DrawLine(PlotTexture, FirstX, FirstY, SecondX, SecondY, LineColor);
+            //Draw horizontal line
+            FirstY = SecondY;
+            SecondX += (int)(BinDimention * PlotScaleX);
+            DrawLine(PlotTexture, FirstX, FirstY, SecondX, SecondY, LineColor);
         }
-        return ToReturn;
+        //Draw Last Vertical
+        FirstX = SecondX;
+        SecondY = (int)StartPosY;
+        DrawLine(PlotTexture, FirstX, FirstY, SecondX, SecondY, LineColor);
     }
-    private float[] PrepareDistribution(float[] MinMax)
+    private void DrawPhaseSpacePlot(float PlotScaleX, float PlotScaleY, float[] XPoints, float MinX, float[] YPoints, float MinY, Color LineColor)
     {
-        float[] ToReturn = new float[2];
-        ToReturn[0] = int.MaxValue;
-        ToReturn[1] = int.MinValue;
-        ActualDistribution = new List<float[]>();
-        for (int Cnt = 0; Cnt < DistributionPlot.Count; Cnt++)
+        int MinPointsNum = Math.Min(XPoints.Length, YPoints.Length);
+        int FirstX, FirstY, SecondX, SecondY;
+        SecondX = (int)((XPoints[0] - MinX) * PlotScaleX + StartPosX);
+        SecondY = (int)((YPoints[0] - MinY) * PlotScaleY + StartPosY);
+        for (int Cnt = 1; Cnt < MinPointsNum; Cnt++)
         {
-            ActualDistribution.Add(MakeDistribution(DistributionPlot[Cnt].Values, MinMax, Cnt));
-            ToReturn[0] = Math.Min(ToReturn[0], ActualDistribution[Cnt].Min());
-            ToReturn[1] = Math.Max(ToReturn[1], ActualDistribution[Cnt].Max());
+            FirstX = SecondX;
+            FirstY = SecondY;
+            if (Cnt <= XPoints.Length) SecondX = (int)((XPoints[Cnt] - MinX) * PlotScaleX + StartPosX);
+            if (Cnt <= YPoints.Length) SecondY = (int)((YPoints[Cnt] - MinY) * PlotScaleY + StartPosY);
+
+            DrawLine(PlotTexture, FirstX, FirstY, SecondX, SecondY, LineColor);
         }
 
-        return ToReturn;
     }
-
-    private float[] MakeDistribution(float[] MainArray, float[] MinMax, int Index)
-    {
-        float Dist = (float)(MinMax[1] - MinMax[0] + 1) / DistributionPlot[Index].NumberOfBins;
-        float[] Distribution = Enumerable.Repeat(0f, DistributionPlot[Index].NumberOfBins).ToArray();
-
-        for (int Cnt = 0; Cnt < MainArray.Length; Cnt++)
-        {
-            Distribution[(int)Math.Floor((MainArray[Cnt] - MinMax[0]) / Dist)]++;
-        }
-        return Distribution;
-    }
-
-    public void DrawLine(Texture2D PlotTexture, int x0, int y0, int x1, int y1, Color LineColor)
+    private void DrawLine(Texture2D PlotTexture, int x0, int y0, int x1, int y1, Color LineColor)
     {
         int dx = 0;
         int dy = 0;
@@ -264,68 +210,117 @@ public class SimplestPlot : MonoBehaviour
             if (e2 < dy) { err += dx; y0 += sy; }
         }
     }
-    public void DrawTimeSeriesPlot(float PlotScaleX, float PlotScaleY, int PlotStartPositionX, int PlotStartPositionY, float MinY, float[] YPoints, Color LineColor)
+    // Support Functios
+    private float[] FindMinMaxSeries(bool XNotY)
     {
-        int FirstX, FirstY, SecondX, SecondY;
-        SecondX = (int)PlotStartPositionX;
-        SecondY = (int)((YPoints[0] - MinY) * PlotScaleY) + PlotStartPositionY;
-
-        for (int Cnt = 1; Cnt < YPoints.Length; Cnt++)
+        float[] MinMaxOnArray = new float[2];
+        float[] ToReturn = new float[2];
+        ToReturn[0] = float.MaxValue;
+        ToReturn[1] = float.MinValue;
+        if (XNotY)
         {
-            FirstX = SecondX;
-            FirstY = SecondY;
-            SecondX = (int)(Cnt * PlotScaleX) + PlotStartPositionX;
-            SecondY = (int)((YPoints[Cnt] - MinY) * PlotScaleY) + PlotStartPositionY;
-            DrawLine(PlotTexture, FirstX, FirstY, SecondX, SecondY, LineColor);
+
+            if (SeriesPlotX == null || SeriesPlotX.Length == 0)
+            {
+                for (int Cnt = 0; Cnt < SeriesPlotY.Count; Cnt++)
+                {
+                    MinMaxOnArray[1] = SeriesPlotY[Cnt].YValues.Length;
+                    ToReturn[1] = Math.Max(ToReturn[1], MinMaxOnArray[1]);
+                }
+                ToReturn[0] = 1;
+            }
+            else
+            {
+                ToReturn[0] = SeriesPlotX.Min();
+                ToReturn[1] = SeriesPlotX.Max();
+            }
         }
+        else
+        {
+            for (int Cnt = 0; Cnt < SeriesPlotY.Count; Cnt++)
+            {
+                MinMaxOnArray[1] = SeriesPlotY[Cnt].YValues.Max();
+                MinMaxOnArray[0] = SeriesPlotY[Cnt].YValues.Min();
+                ToReturn[0] = Math.Min(ToReturn[0], MinMaxOnArray[0]);
+                ToReturn[1] = Math.Max(ToReturn[1], MinMaxOnArray[1]);
+            }
+        }
+
+        return CheckLimits(ToReturn);
     }
-
-    public void DrawDistributionPlot(float PlotScaleX, float PlotScaleY, int PlotStartPositionX, int PlotStartPositionY, float BinDimention, float MinY, float[] YPoints, Color LineColor)
+    private float[] FindMinMaxPhase(bool XNotY)
     {
-        int FirstX, FirstY, SecondX, SecondY;
-        FirstY = PlotStartPositionY;
-        SecondX = PlotStartPositionX;
-
-        for (int Cnt = 0; Cnt < YPoints.Length; Cnt++)
+        float[] MinMaxOnArray = new float[2];
+        float[] ToReturn = new float[2];
+        ToReturn[0] = float.MaxValue;
+        ToReturn[1] = float.MinValue;
+        if (XNotY)
         {
-            //Draw Vertical line
-            FirstX = SecondX;
-            SecondY = (int)((YPoints[Cnt] - MinY) * PlotScaleY) + PlotStartPositionY;
-            DrawLine(PlotTexture, FirstX, FirstY, SecondX, SecondY, LineColor);
-            //Draw horizontal line
-            FirstY = SecondY;
-            SecondX += (int)(BinDimention * PlotScaleX);
-            DrawLine(PlotTexture, FirstX, FirstY, SecondX, SecondY, LineColor);
+            for (int Cnt = 0; Cnt < PhaseSpacePlot.Count; Cnt++)
+            {
+                MinMaxOnArray[1] = PhaseSpacePlot[Cnt].XValues.Max();
+                MinMaxOnArray[0] = PhaseSpacePlot[Cnt].XValues.Min();
+                ToReturn[0] = Math.Min(ToReturn[0], MinMaxOnArray[0]);
+                ToReturn[1] = Math.Max(ToReturn[1], MinMaxOnArray[1]);
+            }
         }
-        //Draw Last Vertical
-        FirstX = SecondX;
-        SecondY = PlotStartPositionY;
-        DrawLine(PlotTexture, FirstX, FirstY, SecondX, SecondY, LineColor);
+        else
+            for (int Cnt = 0; Cnt < PhaseSpacePlot.Count; Cnt++)
+            {
+                MinMaxOnArray[1] = PhaseSpacePlot[Cnt].YValues.Max();
+                MinMaxOnArray[0] = PhaseSpacePlot[Cnt].YValues.Min();
+                ToReturn[0] = Math.Min(ToReturn[0], MinMaxOnArray[0]);
+                ToReturn[1] = Math.Max(ToReturn[1], MinMaxOnArray[1]);
+            }
+        return CheckLimits(ToReturn);
     }
-
-    public void DrawPhaseSpacePlot(float PlotScaleX, float PlotScaleY, int PlotStartPositionX, int PlotStartPositionY, float[] XPoints, float MinYa, float[] YPoints, float MinYb, Color LineColor)
+    private float[] FindMinMaxOfDistribution()
     {
-        int MaxPointsNum = Math.Max(XPoints.Length, YPoints.Length);
-        int FirstX, FirstY, SecondX, SecondY;
-        SecondX = (int)((XPoints[0] - MinYb) * PlotScaleX) + PlotStartPositionX;
-        SecondY = (int)((YPoints[0] - MinYa) * PlotScaleY) + PlotStartPositionY;
-        for (int Cnt = 1; Cnt < MaxPointsNum; Cnt++)
+        float[] MinMaxOnArray = new float[2];
+        float[] ToReturn = new float[2];
+        ToReturn[0] = float.MaxValue;
+        ToReturn[1] = float.MinValue;
+        for (int Cnt = 0; Cnt < DistributionPlot.Count; Cnt++)
         {
-            FirstX = SecondX;
-            FirstY = SecondY;
-            if (Cnt <= XPoints.Length) SecondX = (int)((XPoints[Cnt] - MinYb) * PlotScaleX) + PlotStartPositionX;
-            if (Cnt <= YPoints.Length) SecondY = (int)((YPoints[Cnt] - MinYa) * PlotScaleY) + PlotStartPositionY;
-
-            DrawLine(PlotTexture, FirstX, FirstY, SecondX, SecondY, LineColor);
+            MinMaxOnArray[1] = DistributionPlot[Cnt].Values.Max();
+            MinMaxOnArray[0] = DistributionPlot[Cnt].Values.Min();
+            ToReturn[0] = Math.Min(ToReturn[0], MinMaxOnArray[0]);
+            ToReturn[1] = Math.Max(ToReturn[1], MinMaxOnArray[1]);
+        }
+        return CheckLimits(ToReturn);
+    }
+    private float[] PrepareDistribution(float[] MinMax)
+    {
+        float[] ToReturn = new float[2];
+        ToReturn[0] = int.MaxValue;
+        ToReturn[1] = int.MinValue;
+        ActualDistribution = new List<float[]>();
+        for (int Cnt = 0; Cnt < DistributionPlot.Count; Cnt++)
+        {
+            ActualDistribution.Add(MakeDistribution(DistributionPlot[Cnt].Values, MinMax, Cnt));
+            ToReturn[0] = Math.Min(ToReturn[0], ActualDistribution[Cnt].Min());
+            ToReturn[1] = Math.Max(ToReturn[1], ActualDistribution[Cnt].Max());
         }
 
+        return ToReturn;
+    }
+    private float[] MakeDistribution(float[] MainArray, float[] MinMax, int Index)
+    {
+        float Dist = (float)(MinMax[1] - MinMax[0] + 1) / DistributionPlot[Index].NumberOfBins;
+        float[] Distribution = Enumerable.Repeat(0f, DistributionPlot[Index].NumberOfBins).ToArray();
+
+        for (int Cnt = 0; Cnt < MainArray.Length; Cnt++)
+        {
+            Distribution[(int)Math.Floor((MainArray[Cnt] - MinMax[0]) / Dist)]++;
+        }
+        return Distribution;
     }
 
     private string ConsistencyCheck()
     {
         switch (MyPlotType)
         {
-            case StatsPlotType.TimeSeries:
+            case PlotType.TimeSeries:
                 if (SeriesPlotY.Count == 0) return "Empty Series List. Please add some data.";
                 for (int Cnt = 0; Cnt < SeriesPlotY.Count; Cnt++)
                     if (SeriesPlotY[Cnt].YValues.Length == 0)
@@ -344,22 +339,22 @@ public class SimplestPlot : MonoBehaviour
                             return "Inconsistent length of series " + Cnt + "(" + SeriesPlotY[Cnt].YValues.Length + ") and XValues(" + SeriesPlotX.Length + ")";
                 }
                 break;
-            case StatsPlotType.Distribution:
+            case PlotType.Distribution:
                 if (DistributionPlot.Count == 0) return "Empty Distributions List. Please add some data.";
                 for (int Cnt = 0; Cnt < DistributionPlot.Count; Cnt++)
                     if (DistributionPlot[Cnt].Values.Length == 0)
                         return "Distribution " + Cnt + " Has no Data.";
                 break;
-            case StatsPlotType.PhaseSpace:
-                if (PhaseSpacePlot.Count == 0) return "Empty State Space List. Please add some data.";
+            case PlotType.PhaseSpace:
+                if (PhaseSpacePlot.Count == 0) return "Empty Phase Space List. Please add some data.";
                 for (int Cnt = 0; Cnt < PhaseSpacePlot.Count; Cnt++)
                 {
                     if (PhaseSpacePlot[Cnt].YValues.Length == 0)
-                        return "State Space " + Cnt + " Has no YData.";
+                        return "Phase Space " + Cnt + " Has no YData.";
                     else if (PhaseSpacePlot[Cnt].XValues.Length == 0)
-                        return "State Space " + Cnt + " Has no XData.";
+                        return "Phase Space " + Cnt + " Has no XData.";
                     else if (PhaseSpacePlot[Cnt].YValues.Length != PhaseSpacePlot[Cnt].XValues.Length)
-                        return "State Space " + Cnt + " Has inconsistent Data.(" + PhaseSpacePlot[Cnt].YValues.Length + " vs " + PhaseSpacePlot[Cnt].XValues.Length + ")";
+                        return "Phase Space " + Cnt + " Has inconsistent Data.(" + PhaseSpacePlot[Cnt].YValues.Length + " vs " + PhaseSpacePlot[Cnt].XValues.Length + ")";
                 }
 
                 for (int Cnt = 0; Cnt < PhaseSpacePlot.Count - 1; Cnt++)
@@ -372,28 +367,119 @@ public class SimplestPlot : MonoBehaviour
         }
         return "";
     }
-    private void ResetTransforms()
+    private void UpdateText(float[] MinMaxOfPlotsX, float[] MinMaxOfPlotsY)
     {
+        PlotYMaxText.color = TextColor;
+        PlotYMinText.color = TextColor;
+        PlotXMaxText.color = TextColor;
+        PlotXMinText.color = TextColor;
+        WarningText.color = TextColor;
+
+        PlotYMaxText.fontSize = FontSize;
+        PlotYMinText.fontSize = FontSize;
+        PlotXMaxText.fontSize = FontSize;
+        PlotXMinText.fontSize = FontSize;
+        WarningText.fontSize = FontSize;
+
+        if (AxesVisible && MinMaxOfPlotsY[1] < float.MaxValue && MinMaxOfPlotsY[0] > float.MinValue)
+        {
+            if (MinMaxOfPlotsY[1] >= MinMaxOfPlotsY[0])
+            {
+                PlotYMaxText.text = MinMaxOfPlotsY[1].ToString("0.00");
+                PlotYMinText.text = MinMaxOfPlotsY[0].ToString("0.00");
+            }
+            else
+            {
+                PlotYMaxText.text = "";
+                PlotYMinText.text = "";
+            }
+            if (MinMaxOfPlotsX[0] > MinMaxOfPlotsX[1])
+            {
+                PlotXMaxText.text = "";
+                PlotXMinText.text = "";
+            }
+            else
+            {
+                PlotXMaxText.text = MinMaxOfPlotsX[1].ToString("0.00");
+                PlotXMinText.text = MinMaxOfPlotsX[0].ToString("0.00");
+            }
+        }
+        else
+        {
+            PlotYMaxText.text = "";
+            PlotYMinText.text = "";
+            PlotXMaxText.text = "";
+            PlotXMinText.text = "";
+        }
+    }
+    private void SetupText()
+    {
+        GameObject GOPlotXMinText = new GameObject("XMin", typeof(Text));
+        GameObject GOPlotXMaxText = new GameObject("XMax", typeof(Text));
+        GameObject GOPlotYMinText = new GameObject("YMin", typeof(Text));
+        GameObject GOPlotYMaxText = new GameObject("YMax", typeof(Text));
+        GameObject GOWarningText = new GameObject("Warning", typeof(Text));
+        GOPlotXMinText.transform.SetParent(transform);
+        GOPlotXMaxText.transform.SetParent(transform);
+        GOPlotYMinText.transform.SetParent(transform);
+        GOPlotYMaxText.transform.SetParent(transform);
+        GOWarningText.transform.SetParent(transform);
+        PlotXMinText = GOPlotXMinText.GetComponent<Text>();
+        PlotXMaxText = GOPlotXMaxText.GetComponent<Text>();
+        PlotYMinText = GOPlotYMinText.GetComponent<Text>();
+        PlotYMaxText = GOPlotYMaxText.GetComponent<Text>();
+        WarningText = GOWarningText.GetComponent<Text>();
+
+        PlotYMaxText.alignment = TextAnchor.MiddleLeft;
+        PlotYMinText.alignment = TextAnchor.MiddleLeft;
+        PlotXMaxText.alignment = TextAnchor.MiddleRight;
+        PlotXMinText.alignment = TextAnchor.MiddleLeft;
+        WarningText.alignment = TextAnchor.MiddleCenter;
+
+        PlotYMaxText.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
+        PlotYMinText.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
+        PlotXMaxText.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
+        PlotXMinText.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
+        WarningText.font = Resources.GetBuiltinResource(typeof(Font), "Arial.ttf") as Font;
+
+        PlotYMaxText.color = TextColor;
+        PlotYMinText.color = TextColor;
+        PlotXMaxText.color = TextColor;
+        PlotXMinText.color = TextColor;
+        WarningText.color = TextColor;
+
+        PlotYMaxText.fontSize = FontSize;
+        PlotYMinText.fontSize = FontSize;
+        PlotXMaxText.fontSize = FontSize;
+        PlotXMinText.fontSize = FontSize;
+        WarningText.fontSize = FontSize;
+
         //These might be nice to make them depend on TextureResolution
         PlotYMaxText.GetComponent<RectTransform>().anchorMin = new Vector2(0, 0.9f);
         PlotYMaxText.GetComponent<RectTransform>().anchorMax = new Vector2(0.1f, 1);
         PlotYMaxText.GetComponent<RectTransform>().offsetMin = new Vector2(0, 0);
         PlotYMaxText.GetComponent<RectTransform>().offsetMax = new Vector2(0, 0);
-        PlotYMinText.GetComponent<RectTransform>().anchorMin = new Vector2(0, 0);
-        PlotYMinText.GetComponent<RectTransform>().anchorMax = new Vector2(0.1f, 0.1f);
+        PlotYMinText.GetComponent<RectTransform>().anchorMin = new Vector2(0, 0.1f);
+        PlotYMinText.GetComponent<RectTransform>().anchorMax = new Vector2(0.1f, 0.2f);
         PlotYMinText.GetComponent<RectTransform>().offsetMin = new Vector2(0, 0);
         PlotYMinText.GetComponent<RectTransform>().offsetMax = new Vector2(0, 0);
         PlotXMaxText.GetComponent<RectTransform>().anchorMin = new Vector2(0.9f, 0);
         PlotXMaxText.GetComponent<RectTransform>().anchorMax = new Vector2(1, 0.1f);
         PlotXMaxText.GetComponent<RectTransform>().offsetMin = new Vector2(0, 0);
         PlotXMaxText.GetComponent<RectTransform>().offsetMax = new Vector2(0, 0);
-        PlotXMinText.GetComponent<RectTransform>().anchorMin = new Vector2(0, 0);
-        PlotXMinText.GetComponent<RectTransform>().anchorMax = new Vector2(0.1f, 0.1f);
+        PlotXMinText.GetComponent<RectTransform>().anchorMin = new Vector2(0.08f, 0);
+        PlotXMinText.GetComponent<RectTransform>().anchorMax = new Vector2(0.18f, 0.1f);
         PlotXMinText.GetComponent<RectTransform>().offsetMin = new Vector2(0, 0);
         PlotXMinText.GetComponent<RectTransform>().offsetMax = new Vector2(0, 0);
         WarningText.GetComponent<RectTransform>().anchorMin = new Vector2(0, 0);
         WarningText.GetComponent<RectTransform>().anchorMax = new Vector2(1, 1);
         WarningText.GetComponent<RectTransform>().offsetMin = new Vector2(0, 0);
         WarningText.GetComponent<RectTransform>().offsetMax = new Vector2(0, 0);
+    }
+    private float[] CheckLimits(float[] InMinMax)
+    {
+        if (InMinMax[0] == InMinMax[1])
+            InMinMax[1] = InMinMax[0] + 0.01f;
+        return InMinMax;
     }
 }
