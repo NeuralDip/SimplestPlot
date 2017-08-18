@@ -419,11 +419,11 @@ public class SimplestPlot : MonoBehaviour
         GameObject GOPlotYMinText = new GameObject("YMin", typeof(Text));
         GameObject GOPlotYMaxText = new GameObject("YMax", typeof(Text));
         GameObject GOWarningText = new GameObject("Warning", typeof(Text));
-        GOPlotXMinText.transform.SetParent(transform);
-        GOPlotXMaxText.transform.SetParent(transform);
-        GOPlotYMinText.transform.SetParent(transform);
-        GOPlotYMaxText.transform.SetParent(transform);
-        GOWarningText.transform.SetParent(transform);
+        GOPlotXMinText.transform.SetParent(transform, false);
+        GOPlotXMaxText.transform.SetParent(transform, false);
+        GOPlotYMinText.transform.SetParent(transform, false);
+        GOPlotYMaxText.transform.SetParent(transform, false);
+        GOWarningText.transform.SetParent(transform, false);
         PlotXMinText = GOPlotXMinText.GetComponent<Text>();
         PlotXMaxText = GOPlotXMaxText.GetComponent<Text>();
         PlotYMinText = GOPlotYMinText.GetComponent<Text>();
