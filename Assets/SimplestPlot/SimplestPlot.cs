@@ -40,8 +40,11 @@ public class SimplestPlot : MonoBehaviour
     private float StartPosY;
 
     // Global Variables
-    public Color BackGroundColor = new Color(0, 0, 0);
-    public Color TextColor = new Color(1, 1, 1);
+    public Color BackGroundColor = new Color(0, 0, 0, 0);
+    public byte Ar = 0;
+    private Color PrevBackGroundColor = new Color(0, 0, 0, 0);
+    private Color[] BackGroundArray;
+    public Color TextColor = new Color(1, 1, 1, 1);
     public int FontSize = 12;
     public PlotType MyPlotType = PlotType.TimeSeries;
     public bool ShowWarnings = true;
@@ -60,7 +63,7 @@ public class SimplestPlot : MonoBehaviour
     private Text PlotXMinText;
     private Text WarningText;
     // Use this for initialization
-    void Start()
+    public void Start()
     {
         PlotImage = GetComponent<Image>();
         if (PlotImage == null) throw new Exception("Simplest plot needs an image component in the same GameObject in order to work.");
@@ -89,7 +92,7 @@ public class SimplestPlot : MonoBehaviour
     // Main Update. Can put this into Update, but might be better to update only when data has changed
     public void UpdatePlot()
     {
-        PlotTexture.SetPixels(Enumerable.Repeat(BackGroundColor, (int)(TextureResolution.x * TextureResolution.y)).ToArray());
+        PlotTexture.SetPixels(GetFreshBackGroundArray());
         float[] MinMaxOfPlotsY = new float[2];
         float[] MinMaxOfPlotsX = new float[2];
         float ScaleX = 0;
@@ -130,6 +133,7 @@ public class SimplestPlot : MonoBehaviour
 
         UpdateText(MinMaxOfPlotsX, MinMaxOfPlotsY);
         PlotTexture.Apply();
+        Resources.UnloadUnusedAssets();
     }
 
     // Draw Functions
@@ -187,7 +191,6 @@ public class SimplestPlot : MonoBehaviour
 
             DrawLine(PlotTexture, FirstX, FirstY, SecondX, SecondY, LineColor);
         }
-
     }
     private void DrawLine(Texture2D PlotTexture, int x0, int y0, int x1, int y1, Color LineColor)
     {
@@ -481,5 +484,16 @@ public class SimplestPlot : MonoBehaviour
         if (InMinMax[0] == InMinMax[1])
             InMinMax[1] = InMinMax[0] + 0.01f;
         return InMinMax;
+    }
+    private Color[] GetFreshBackGroundArray()// This is used for speed. Creating the enumerable on every frame may slow down things
+    {
+        Color[] ToReturn = new Color[(int)(TextureResolution.x * TextureResolution.y)];
+        if (PrevBackGroundColor != BackGroundColor)
+        {
+            PrevBackGroundColor = BackGroundColor;
+            BackGroundArray = Enumerable.Repeat(BackGroundColor, (int)(TextureResolution.x * TextureResolution.y)).ToArray();
+        }
+        Array.Copy(BackGroundArray, 0, ToReturn, 0, (int)(TextureResolution.x * TextureResolution.y));
+        return ToReturn;
     }
 }
